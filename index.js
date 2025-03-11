@@ -1,4 +1,4 @@
- require('dotenv').config();
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const Stripe = require('stripe');
@@ -16,11 +16,14 @@ async function fetchAllTransactions(limit = 50) {
 
     while (hasMore) {
         try {
-            // ✅ Fetch 50 transactions per request (Stripe max limit)
-            const transactions = await stripe.paymentIntents.list({
-                limit: limit,
-                starting_after: lastTransactionId // Pagination
-            });
+            // ✅ Build request parameters dynamically
+            let params = { limit: limit };
+            if (lastTransactionId) {
+                params.starting_after = lastTransactionId; // ✅ Only add if there's a previous transaction
+            }
+
+            // ✅ Fetch transactions from Stripe
+            const transactions = await stripe.paymentIntents.list(params);
 
             console.log(`Fetched ${transactions.data.length} transactions`);
 
