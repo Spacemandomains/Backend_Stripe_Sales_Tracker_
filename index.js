@@ -1,4 +1,4 @@
-require('dotenv').config();
+ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const Stripe = require('stripe');
@@ -9,24 +9,53 @@ const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 app.use(cors());
 app.use(express.json());
 
+async function fetchAllTransactions(limit = 50) {
+    let allTransactions = [];
+    let hasMore = true;
+    let lastTransactionId = null;
+
+    while (hasMore) {
+        try {
+            // ✅ Fetch 50 transactions per request (Stripe max limit)
+            const transactions = await stripe.paymentIntents.list({
+                limit: limit,
+                starting_after: lastTransactionId // Pagination
+            });
+
+            console.log(`Fetched ${transactions.data.length} transactions`);
+
+            if (!transactions || !transactions.data) {
+                throw new Error("No transactions found");
+            }
+
+            // ✅ Filter only successful transactions
+            const successfulTransactions = transactions.data.filter(transaction => transaction.status === "succeeded");
+
+            allTransactions.push(...successfulTransactions);
+
+            // ✅ Check if there are more transactions to fetch
+            hasMore = transactions.has_more;
+            if (hasMore) {
+                lastTransactionId = transactions.data[transactions.data.length - 1].id;
+            }
+        } catch (error) {
+            console.error("Stripe API Error:", error.message);
+            break;
+        }
+    }
+
+    return allTransactions;
+}
+
 app.get('/sales', async (req, res) => {
     try {
-        console.log("Fetching donation transactions from Stripe...");
+        console.log("Fetching all donation transactions from Stripe...");
 
-        // ✅ Fetch last 10 successful payments (donations)
-        const transactions = await stripe.paymentIntents.list({
-            limit: 10,
-            status: "succeeded" // Only fetch successful donations
-        });
+        // ✅ Fetch all successful donations
+        const transactions = await fetchAllTransactions();
 
-        console.log("Stripe Transactions:", transactions);
-
-        if (!transactions || !transactions.data) {
-            throw new Error("No successful transactions found");
-        }
-
-        // ✅ Process each donation and return proper amounts
-        const processedTransactions = transactions.data.map(transaction => ({
+        // ✅ Format transactions for frontend
+        const processedTransactions = transactions.map(transaction => ({
             id: transaction.id,
             amount: transaction.amount_received, // Amount donated in cents
             currency: transaction.currency,
